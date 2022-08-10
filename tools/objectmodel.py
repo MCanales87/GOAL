@@ -45,7 +45,7 @@ class ObjectModel(nn.Module):
 
 
         self.dtype = dtype
-
+        
         # Mean template vertices
         if v_template is None:
             v_template = torch.zeros([batch_size, 1000, 3], dtype=dtype)

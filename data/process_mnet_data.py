@@ -47,9 +47,10 @@ INTENTS = ['lift', 'pass', 'offhand', 'use', 'all']
 class MNetDataSet(object):
 
     def __init__(self, cfg, logger=None, **params):
-
+        # cfg = 'grab_preprocessing_cfg.yaml'
         self.cfg = cfg
         self.grab_path = cfg.grab_path
+        # out_path = 'grab/MNet_data'
         self.out_path = cfg.out_path
         self.cwd = os.path.dirname(sys.argv[0])
         makepath(self.out_path)
@@ -73,8 +74,24 @@ class MNetDataSet(object):
         else:
             assert isinstance(cfg.splits, dict)
             self.splits = cfg.splits
+            #   splits = {
+            #      'test': [
+            #           'mug',
+            #      	    'camera',
+            #      		'binoculars',
+            #      		'apple',
+            #      		'toothpaste'
+            #      ],
+            #      'train': [],
+            #      'val':  [
+            #      		'fryingpan',
+            #      		'toothbrush',
+            #      		'elephant',
+            #      		'hand',
+            #      ]
+            #   }
             
-        self.all_seqs = glob.glob(os.path.join(self.grab_path ,'grab/*/*.npz'))
+        self.all_seqs = glob.glob(os.path.join('grab/*/*.npz'))
         
         ### to be filled 
         self.selected_seqs = []
@@ -101,7 +118,7 @@ class MNetDataSet(object):
 
         self.obj_info = {}
         self.sbj_info = {}
-
+        # out_path: 'grab/MNet_data'
         bps_path = makepath(os.path.join(cfg.out_path, 'bps.pt'), isfile=True)
         bps_orig_path = f'{self.cwd}/../configs/bps.pt'
 
@@ -110,8 +127,8 @@ class MNetDataSet(object):
 
         self.bps_torch = bps_torch()
 
-
-
+        # bps_orig_path contain:
+        # obj, sbj, rh [1,1024,3], hd [1, 2048, 3]
         self.bps = torch.load(bps_orig_path)
         shutil.copy2(bps_orig_path, bps_path)
         self.logger(f'loading bps from {bps_orig_path}')
@@ -140,9 +157,16 @@ class MNetDataSet(object):
         #         'hd':self.bps_hd.cpu(),
         #     }
         #     torch.save(self.bps,bps_path)
-
+        
+        # vertex_label_contact.npy contains:
+        # [16, 16, 16, ..., 25, 25, 25] (10475)
         vertex_label_contact = to_tensor(np.load(f'{self.cwd}/../consts/vertex_label_contact.npy'), dtype=torch.int8).reshape(1, -1)
+        # verts_ids_0512.npy contains:
+        # [  18,   39,  194,  198,  229,  271,  337,  373,  510,  537,  679 ...] (400)
         verts_ids = to_tensor(np.load(f'{self.cwd}/../consts/verts_ids_0512.npy'), dtype=torch.long)
+        
+        # rhand_smplx_ids.npy
+        # [7333, 7334, 7331, 7332, 7338, 7335, 7336, 7337, 7340, 7339, 7342,...] (778)
         rh_verts_ids = to_tensor(np.load(f'{self.cwd}/../consts/rhand_smplx_ids.npy'), dtype=torch.long)
     
         stime = datetime.now().replace(microsecond=0)
@@ -153,9 +177,14 @@ class MNetDataSet(object):
         self.subject_mesh = {}
         self.obj_info = {}
         self.sbj_info = {}
-
+        # self.split_seqs = {
+        #        'train':[file1, file2,...], 
+        #        'test':['grab/s2/mug_pass_1.npz', 'grab/s1/phone_pass_1.npz',..], 
+        #        'val':[]
+        #    }
         for split in self.split_seqs.keys():
             # split = 'train'
+            # 
             outfname = makepath(os.path.join(cfg.out_path, split, 'grasp_motion_data.npy'), isfile=True)
 
             if os.path.exists(outfname):
@@ -185,17 +214,23 @@ class MNetDataSet(object):
                                 'rel_rot':[],
                                 'rel_trans':[],
                                 }
-
+            # self.split_seqs = {'train': [pathfile1, pathfile2,..], 'test':[...], 'val':[...]}
             for seq_i, sequence in enumerate(tqdm(self.split_seqs[split])):
-
+                
+                # sequence = 'grab/sX/<object>_<action>_#.npz', <objects> in split_seqs['test']
+                #
                 seq_data = parse_npz(sequence)
-
+                
+                # 'mug'
                 obj_name = seq_data.obj_name
+                # 's2'
                 sbj_id   = seq_data.sbj_id
-
+                # 24 - The number of PCA components to use for each hand.
                 n_comps  = seq_data.n_comps
+                # 'male'
                 gender   = seq_data.gender
-
+                
+                # [True True False False ...] grupo de frames iniciales
                 frame_mask = self.filter_grasp_frames(seq_data)
 
                 T = frame_mask.sum()
@@ -205,14 +240,14 @@ class MNetDataSet(object):
                 ##### motion data preparation
                 sbj_vtemp = self.load_sbj_verts(sbj_id, seq_data)
                 obj_info = self.load_obj_verts(obj_name, seq_data, cfg.n_verts_sample)
-
+                # {1: resultado trnasl, 2: resultado de body ... }
                 sbj_params = prepare_params(seq_data.body.params, frame_mask)
                 obj_params = prepare_params(seq_data.object.params, frame_mask)
                 contact_data_orig = seq_data.contact.body[frame_mask]
 
                 sbj_params_orig = params2torch(sbj_params)
                 obj_params_orig = params2torch(obj_params)
-
+                
                 ################# for chunks
 
                 past = self.cfg.past
@@ -223,6 +258,9 @@ class MNetDataSet(object):
                 bs = wind
 
                 with torch.no_grad():
+                    # model_path = 'smplx/models/'<model_path>
+                    # 'smplx/models/smplx<model_type>/SMPLX_[MALE,FEMALE,NEUTRAL].npz'
+                    #
                     sbj_m = smplx.create(model_path=cfg.model_path,
                                          model_type='smplx',
                                          gender=gender,
@@ -236,17 +274,40 @@ class MNetDataSet(object):
                     root_offset = smplx.lbs.vertices2joints(sbj_m.J_regressor, sbj_m.v_template.view(1, -1, 3))[0, 0]
                     ##### batch motion data selection
 
+                    # tensor([0, 1, 2, 3, 4]) - T = 5 
                     frames = torch.arange(T).to(torch.long)
                     # duplicate first and last frames to have past and furture frames for them as well
+                    # frames = tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4])
+                    # torch.Size([25])
                     frames = torch.cat([torch.zeros(past), frames, torch.ones(future) * (T - 1)]).to(torch.long)
-                    chunks = frames.unfold(dimension=0, size=wind-1, step=1)  # create motion chuncks
-
+                    chunks = frames.unfold(dimension=0, size=wind-1, step=1)  # create motion chuncks, wind = 10 + 10 + 1 + 1 = 22
+                    #chunks: tensor([[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 4, 4, 4, 4, 4],
+                    #                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 4, 4, 4, 4, 4, 4],
+                    #                [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 4, 4, 4, 4, 4, 4, 4],
+                    #                [0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+                    #                [0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+                    #                [0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4]])
+                    # torch.Size([6, 20])
+                    #
+                    # enumerate: 
+                    #[(0, tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 4, 4, 4, 4, 4])), (1, tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 4, 4, 4, 4, 4, 4])), (2, tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 4, 4, 4, 4, 4, 4, 4])), (3, tensor([0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4])), (4, tensor([0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4])), (5, tensor([0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4]))]
+                    #
+                    # ch_id = 2, 
+                    # ch = tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 4, 4, 4, 4, 4, 4, 4])
+                    #
                     for ch_id, ch in enumerate(chunks):
 
                         ch = torch.cat([ch, torch.tensor([-1])]).to(torch.long) #to get last frame of motion
-
-                        sbj_params = {k:v[ch] for k,v in sbj_params_orig.items()}
-                        obj_params = {k:v[ch] for k,v in obj_params_orig.items()}
+                        # dentro del mismo frame de animacion 'v' se cogen los 'ch' frames
+                        # sbj_params_orig conjunto de animaciones total para un cuerpo, así se 
+                        # consigue los v[ch] = {transl: [0 0..ch..ch 0 0..], fullpose:[0..ch..0]}
+                        #
+                        # sbj_params = {0: v_frame_0[ch], 1: v_frame_1[ch] ... }
+                        #
+                        sbj_params = { k:v[ch] for k,v in sbj_params_orig.items() }
+                        obj_params = { k:v[ch] for k,v in obj_params_orig.items() }
+                        #
+                        # contact_data_orig = [ number frames - 1034 , vertices body - 10475 ]
                         contact_chunk = contact_data_orig[ch]
 
                         R = aa2rotmat(sbj_params['global_orient'][past])
@@ -338,8 +399,12 @@ class MNetDataSet(object):
     def process_sequences(self):
 
         for sequence in self.all_seqs:
+            # sequence = grab/s2/phone_call_1.npz
+            # s2
             subject_id = sequence.split('/')[-2]
+            # phone_call_1.npz
             action_name = os.path.basename(sequence)
+            # phone
             object_name = action_name.split('_')[0]
 
             # filter data based on the motion intent
@@ -356,13 +421,42 @@ class MNetDataSet(object):
                 self.obj_based_seqs[object_name] = [sequence]
             else:
                 self.obj_based_seqs[object_name].append(sequence)
-
+            # self.obj_based_seqs = {
+            #                    'mug': {
+            #                        'grab/s1/mug_pass_1.npz', 
+            #                        'grab/s1/mug_offhand_1.npz',
+            #                        ...
+            #                        'grab/s2/mug_drink_1.npz',
+            #                        ...
+            #                    },
+            #                    'phone': {
+            #                        'grab/s1/phone_call_1.npz', 
+            #                        'grab/s1/phone_pass_1.npz',
+            #                        ...
+            #                        'grab/s2/phone_call_1.npz',
+            #                        ...                            
+            #                    }, 
+            #                    ...
+            #               }
             # group motion sequences based on subjects
             if subject_id not in self.sbj_based_seqs:
                 self.sbj_based_seqs[subject_id] = [sequence]
             else:
                 self.sbj_based_seqs[subject_id].append(sequence)
-
+            # self.sbj_based_seqs = {
+            #                    's1': {
+            #                        'grab/s1/mug_pass_1.npz', 
+            #                        'grab/s1/phone_pass_1.npz',
+            #                        ...
+            #                    },
+            #                    's2': {
+            #                        'grab/s2/mug_pass_1.npz', 
+            #                        'grab/s2/phone_pass_1.npz',
+            #                        ...                    
+            #                    },
+            #                    ...
+            #            }
+            #
             # split train, val, and test sequences
             self.selected_seqs.append(sequence)
             if object_name in self.splits['test']:
@@ -373,7 +467,18 @@ class MNetDataSet(object):
                 self.split_seqs['train'].append(sequence)
                 if object_name not in self.splits['train']:
                     self.splits['train'].append(object_name)
-
+                    
+            ## self.split_seqs['test'] = 
+            ##        [
+            ##                    'grab/s1/phone_call_1.npz', 
+            ##                    'grab/s2/phone_walk_1.npz',
+            ##                    ...
+            ##                    'grab/s2/mug_call_1.npz', 
+            ##                    'grab/s3/mug_walk_1.npz',
+            ##                    ...                
+            ##        ]
+            ##    
+            
     def filter_grasp_frames(self,seq_data):
 
         table_height = seq_data.object.params.transl[0, 2]
@@ -400,13 +505,13 @@ class MNetDataSet(object):
         grasp_frame = idxs[fil][0]  # find the first frame of grasp
         grasp_frames = idxs < grasp_frame
 
-        start_pose = seq_data.body.params.fullpose[0:1]
+        start_pose = seq_data.body.params.fullpose[0:1] 
 
         include_fil = np.isin(contact_array[grasp_frame], cfg.include_joints).any()
         exclude_fil = ~np.isin(contact_array[grasp_frame], cfg.exclude_joints).any()
 
         grasp_motion_frames = grasp_frames * include_fil * exclude_fil * fps_fil * start_fil
-
+        # [True True False False ...] grupo de frames iniciales
         return grasp_motion_frames
 
     def load_obj_verts(self, obj_name, seq_data, n_verts_sample=2048):
@@ -433,7 +538,7 @@ class MNetDataSet(object):
         return self.obj_info[obj_name]
 
     def load_sbj_verts(self, sbj_id, seq_data):
-
+        # vtemp = 'tools/subject_meshes/male/s2.ply'
         mesh_path = os.path.join(self.grab_path, seq_data.body.vtemp)
         betas_path = mesh_path.replace('.ply', '_betas.npy')
         if sbj_id in self.sbj_info:

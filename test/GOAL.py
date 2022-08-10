@@ -145,7 +145,9 @@ class Trainer:
         loss_cfg = self.cfg.get('losses', {})
         self.verts_ids = to_tensor(np.load(self.cfg.datasets.verts_sampled), dtype=torch.long)
         self.rhand_idx = torch.from_numpy(np.load(loss_cfg.rh2smplx_idx))
-        self.rh_ids_sampled = torch.tensor(np.where([id in self.rhand_idx for id in self.verts_ids])[0]).to(torch.long)
+        
+        # getting the first index of self.rhand_idx it is in self.verts_ids        
+        self.rh_ids_sampled = torch.tensor(np.where([id in self.rhand_idx for id in self.verts_ids])[0]).to(torch.long) 
 
     def load_data(self,cfg, inference):
 
@@ -391,7 +393,7 @@ class Trainer:
 
         ds_name = 'test'
         data = self.ds_test
-
+        
         base_movie_path = os.path.join(self.cfg.results_base_dir, self.cfg.expr_ID)
 
         chunk_starts = self.data_info[ds_name]['chunk_starts']
@@ -405,7 +407,8 @@ class Trainer:
         else:
             mvs = None
 
-
+        # ~ print(data);
+        
         for batch_id, batch in enumerate(data):
 
             if not chunk_starts[batch_id]:
@@ -602,6 +605,8 @@ class Trainer:
             verts_obj_glob = obj_out_glob.vertices
 
             grnd_mesh, cage, axis_l = get_ground()
+            print("visualize: ", str(visualize));
+            print("grasping_motion.n_frames: ", str(grasping_motion.n_frames));
             #################
             for i in range(grasping_motion.n_frames - 1):
                 sbj_i = Mesh(v=to_cpu(verts_sbj_glob[i]), f=sbj_m.faces, vc=name_to_rgb['pink'])
@@ -621,7 +626,8 @@ class Trainer:
                 sp_anim_motion.save_animation(motion_path)
                 sp_anim_static.save_animation(grasp_path)
             ############################
-
+            print("SALIENDOOOO.....");
+            
 def loc2vel(loc,fps):
     B = loc.shape[0]
     idxs = [0] + list(range(B-1))

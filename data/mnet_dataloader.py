@@ -47,6 +47,7 @@ class LoadData(data.Dataset):
         self.split_name = split_name
         self.ds_dir = cfg.dataset_dir
         self.cfg = cfg
+        # dataset_dir = 'grab/MNet_data'
         dataset_dir = cfg.dataset_dir
 
         self.split_name = split_name
@@ -55,11 +56,20 @@ class LoadData(data.Dataset):
         self.ds = {}
         # dataset_dir = cfg.out_path
         self.ds_path = os.path.join(dataset_dir,split_name)
+        #
+        # `datasets` contiene los grupos de chunk de frames de animaciones en una ventana para poder entrenar
+        # datasets = "grab/MNet_data/test/*.npy" ("grab/MNet_data/test/grasp_motion_data.npy")
         datasets = glob.glob(self.ds_path + '/*.npy')
-
+        # ~ print("ruta:");
+        # ~ print(self.ds_path + '/*.npy');
         self.load_ds(datasets)
+        # self.ds = torch.array({transl: A(7267, 22, 3), fullpose: A(7267, 22, 165),...rel_rot:A})
+        #
         # self.normalize()
+        # After the reshape: (7267, 21):
         self.frame_names = np.load(os.path.join(dataset_dir,split_name, 'frame_names.npz'))['frame_names'].reshape(-1,21)
+        # ~ print("self");
+        # ~ print(dataset_dir,split_name, 'frame_names.npz');
         self.frame_sbjs = np.asarray([name.split('/')[-2] for name in self.frame_names[:,10]])
         self.frame_st_end = np.asarray([int(name.split('_')[-1]) for name in self.frame_names[:,10]])
         self.frame_objs = np.asarray([os.path.basename(name).split('_')[0] for name in self.frame_names[:,10]])
@@ -107,8 +117,10 @@ class LoadData(data.Dataset):
         self.frame_objs = torch.from_numpy(self.frame_objs.astype(np.int8)).to(torch.long)
 
 
-        # find the end of each sequence
+        # find the end of each sequence # all 10 columns elements
         end = self.frame_names.reshape(-1,21)[:,10]
+        # ~ print("end:");
+        # ~ print(self.frame_names);
         end_id = np.array([int(n.split('/')[-1].split('_')[-1]) for n in end])
         is_end = loc2vel(end_id,1)
         is_end = is_end < 1.
@@ -183,9 +195,11 @@ class LoadData(data.Dataset):
         data_out['idx'] = torch.from_numpy(np.array(idx, dtype=np.int32))
         return data_out
 
-
+#calcula la velocidad { ( vi+1 - vi ) / ( 1 / fps )}
 def loc2vel(loc,fps):
     B = loc.shape[0]
+    # ~ print('loc=');
+    # ~ print(loc);
     idxs = [0] + list(range(B-1))
     # vel = (loc - loc[idxs])/(1/float(fps))
     vel = (loc[1:] - loc[:-1])/(1/float(fps))

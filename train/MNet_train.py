@@ -118,6 +118,7 @@ class Trainer:
             self.logger('Using %d CUDA cores [%s] for training!' % (gpu_count, gpu_brand))
 
         self.data_info = {}
+        # inference = 'train', 'test', etc
         self.load_data(cfg, inference)
 
 
@@ -156,6 +157,7 @@ class Trainer:
 
         # Create the network
         self.n_out_frames = self.cfg.network.n_out_frames
+        # aqui empieza a ejecutarse y aplicarse los valores de entrada a la red: función forward
         self.network = mnet_model(**cfg.network.mnet_model).to(self.device)
 
         # Setup the training losses

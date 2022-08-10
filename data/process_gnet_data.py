@@ -79,8 +79,10 @@ class GNetDataSet(object):
         else:
             assert isinstance(cfg.splits, dict)
             self.splits = cfg.splits
-            
-        self.all_seqs = glob.glob(os.path.join(self.grab_path ,'grab/*/*.npz'))
+        
+        # ~ print('seq');
+        # ~ print(self.grab_path ,'grab/*/*.npz');
+        self.all_seqs = glob.glob(os.path.join('grab/*/*.npz'))
         
         ### to be filled 
         self.selected_seqs = []
@@ -360,7 +362,7 @@ class GNetDataSet(object):
         return in_contact_frames
 
     def load_obj_verts(self, obj_name, seq_data, n_verts_sample=2048):
-
+        
         mesh_path = os.path.join(self.grab_path, seq_data.object.object_mesh)
         if obj_name not in self.obj_info:
             np.random.seed(100)
@@ -383,8 +385,10 @@ class GNetDataSet(object):
         return self.obj_info[obj_name]
 
     def load_sbj_verts(self, sbj_id, seq_data):
-
+        
         mesh_path = os.path.join(self.grab_path, seq_data.body.vtemp)
+        # ~ print('path:');
+        # ~ print(mesh_path);
         betas_path = mesh_path.replace('.ply', '_betas.npy')
         if sbj_id in self.sbj_info:
             sbj_vtemp = self.sbj_info[sbj_id]['vtemp']
